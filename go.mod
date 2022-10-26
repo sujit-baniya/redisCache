@@ -1,4 +1,4 @@
-module redisCache
+module github.com/sujit-baniya/redisCache
 
 go 1.19
 
