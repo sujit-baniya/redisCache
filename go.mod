@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/sujit-baniya/framework v1.0.15
+	github.com/sujit-baniya/framework v1.0.17
 )
 
 require (

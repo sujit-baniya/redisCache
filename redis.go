@@ -15,11 +15,14 @@ type Config struct {
 	Port     string
 	DB       int
 	Password string
+	Context  context.Context
 }
 
 type Redis struct {
+	ctx    context.Context
 	Prefix string
 	Redis  *redis.Client
+	config Config
 }
 
 func New(config ...Config) (cache.Store, error) {
@@ -38,22 +41,30 @@ func New(config ...Config) (cache.Store, error) {
 		Password: cfg.Password,
 		DB:       cfg.DB,
 	})
-
-	_, err := client.Ping(context.Background()).Result()
+	if cfg.Context == nil {
+		cfg.Context = context.Background()
+	}
+	_, err := client.Ping(cfg.Context).Result()
 	if err != nil {
 		return nil, err
 	}
 
 	return &Redis{
+		ctx:    cfg.Context,
 		Redis:  client,
 		Prefix: cfg.Prefix,
 	}, nil
 }
 
+func (r *Redis) WithContext(ctx context.Context) cache.Store {
+	r.config.Context = ctx
+	store, _ := New(r.config)
+	return store
+}
+
 // Get Retrieve an item from the cache by key.
 func (r *Redis) Get(key string, def interface{}) interface{} {
-	ctx := context.Background()
-	val, err := r.Redis.Get(ctx, r.Prefix+key).Result()
+	val, err := r.Redis.Get(r.ctx, r.Prefix+key).Result()
 	if err != nil {
 		switch s := def.(type) {
 		case func() interface{}:
@@ -108,8 +119,7 @@ func (r *Redis) GetString(key string, def string) string {
 
 // Has Check an item exists in the cache.
 func (r *Redis) Has(key string) bool {
-	ctx := context.Background()
-	value, err := r.Redis.Exists(ctx, r.Prefix+key).Result()
+	value, err := r.Redis.Exists(r.ctx, r.Prefix+key).Result()
 
 	if err != nil || value == 0 {
 		return false
@@ -120,8 +130,7 @@ func (r *Redis) Has(key string) bool {
 
 // Put Store an item in the cache for a given number of seconds.
 func (r *Redis) Put(key string, value interface{}, seconds time.Duration) error {
-	ctx := context.Background()
-	err := r.Redis.Set(ctx, r.Prefix+key, value, seconds).Err()
+	err := r.Redis.Set(r.ctx, r.Prefix+key, value, seconds).Err()
 	if err != nil {
 		return err
 	}
@@ -131,9 +140,8 @@ func (r *Redis) Put(key string, value interface{}, seconds time.Duration) error 
 
 // Pull Retrieve an item from the cache and delete it.
 func (r *Redis) Pull(key string, def interface{}) interface{} {
-	ctx := context.Background()
-	val, err := r.Redis.Get(ctx, r.Prefix+key).Result()
-	r.Redis.Del(ctx, r.Prefix+key)
+	val, err := r.Redis.Get(r.ctx, r.Prefix+key).Result()
+	r.Redis.Del(r.ctx, r.Prefix+key)
 
 	if err != nil {
 		return def
@@ -144,8 +152,7 @@ func (r *Redis) Pull(key string, def interface{}) interface{} {
 
 // Add Store an item in the cache if the key does not exist.
 func (r *Redis) Add(key string, value interface{}, seconds time.Duration) bool {
-	ctx := context.Background()
-	val, err := r.Redis.SetNX(ctx, r.Prefix+key, value, seconds).Result()
+	val, err := r.Redis.SetNX(r.ctx, r.Prefix+key, value, seconds).Result()
 	if err != nil {
 		return false
 	}
@@ -198,8 +205,7 @@ func (r *Redis) Forever(key string, value interface{}) bool {
 
 // Forget Remove an item from the cache.
 func (r *Redis) Forget(key string) bool {
-	ctx := context.Background()
-	_, err := r.Redis.Del(ctx, r.Prefix+key).Result()
+	_, err := r.Redis.Del(r.ctx, r.Prefix+key).Result()
 
 	if err != nil {
 		return false
@@ -210,8 +216,7 @@ func (r *Redis) Forget(key string) bool {
 
 // Flush Remove all items from the cache.
 func (r *Redis) Flush() bool {
-	ctx := context.Background()
-	res, err := r.Redis.FlushAll(ctx).Result()
+	res, err := r.Redis.FlushAll(r.ctx).Result()
 
 	if err != nil || res != "OK" {
 		return false
